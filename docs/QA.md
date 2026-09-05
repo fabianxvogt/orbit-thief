@@ -6,9 +6,9 @@ Reference build: Orbit Thief v1, static browser distribution from `dist/client`.
 
 | Contract | Evidence | Status |
 | --- | --- | --- |
-| Interactive onboarding | Safe tutorial requires a real press and release before its fixed 9-second success window | Implemented; human acceptance pending |
+| Interactive onboarding | Safe tutorial requires a real press and release before its fixed 9-second success window; death returns to retry without certifying | Implemented; human acceptance pending |
 | Complete play loop | Four modes, spark collection, near-miss multiplier, hazard death, completion, score banking, instant retry | Implemented; browser journey pending serialized QA |
-| Deterministic simulation | `FIXED_DT = 1/60`, seeded orbit generation, fixed input event frames, re-simulation comparison | Implemented; physics fixture passes |
+| Deterministic simulation | `FIXED_DT = 1/60`, seeded orbit generation, fixed input event frames, bounded alternating event validation, re-simulation comparison | Implemented; physics fixture passes |
 | Trajectory replay | Saved input events are re-simulated; displayed trajectory is the verified replay path | Implemented; browser journey pending |
 | Progression | Medal counts persist locally; Redline, Black Halo, and Night Shift unlock from attainable medal totals | Implemented |
 | Persistence | localStorage stores settings, progress, scores, and latest replay | Implemented; storage failure is surfaced |

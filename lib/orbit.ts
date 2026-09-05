@@ -7,6 +7,9 @@ export const HAZARD_COLLISION_RADIUS = 21;
 export const SAFE_ORBIT_MIN = 70;
 export const SAFE_ORBIT_MAX = 306;
 
+export type HazardContact = "collision" | "buffer" | "near-miss" | "clear";
+export type TerminalReason = "collision" | "escape" | "well" | null;
+
 export type Vec2 = { x: number; y: number };
 
 export type OrbitState = {
@@ -93,4 +96,37 @@ export function makeOrbit(seed: number): OrbitState {
 
 export function distance(a: Vec2, b: Vec2): number {
   return Math.hypot(a.x - b.x, a.y - b.y);
+}
+
+export function classifyHazardGap(gap: number): HazardContact {
+  if (gap < HAZARD_COLLISION_RADIUS) return "collision";
+  if (gap < HAZARD_NEAR_MISS_MIN) return "buffer";
+  if (gap < HAZARD_NEAR_MISS_RADIUS) return "near-miss";
+  return "clear";
+}
+
+export function isSparkHit(gap: number): boolean {
+  return gap < SPARK_HIT_RADIUS;
+}
+
+export function isOutsideSafeOrbit(radius: number): boolean {
+  return radius > SAFE_ORBIT_MAX || radius < SAFE_ORBIT_MIN;
+}
+
+export function resolveTerminal(gap: number, radius: number): TerminalReason {
+  const contact = classifyHazardGap(gap);
+  if (contact === "collision") return "collision";
+  if (radius > SAFE_ORBIT_MAX) return "escape";
+  if (radius < SAFE_ORBIT_MIN) return "well";
+  return null;
+}
+
+export function awardSpark(score: number, multiplier: number) {
+  const nextMultiplier = Math.min(6, multiplier + 0.35);
+  return { score: score + 100 * nextMultiplier, multiplier: nextMultiplier };
+}
+
+export function awardNearMiss(score: number, multiplier: number) {
+  const nextMultiplier = Math.min(6, multiplier + 0.7);
+  return { score: score + 75 * nextMultiplier, multiplier: nextMultiplier };
 }

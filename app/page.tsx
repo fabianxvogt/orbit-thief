@@ -5,15 +5,14 @@ import type { PointerEvent as ReactPointerEvent } from "react";
 import {
   distance,
   FIXED_DT,
-  HAZARD_COLLISION_RADIUS,
-  HAZARD_NEAR_MISS_MIN,
-  HAZARD_NEAR_MISS_RADIUS,
   hashSeed,
+  awardNearMiss,
+  awardSpark,
+  classifyHazardGap,
+  isSparkHit,
   makeOrbit,
-  SAFE_ORBIT_MAX,
-  SAFE_ORBIT_MIN,
   seededUnit,
-  SPARK_HIT_RADIUS,
+  resolveTerminal,
   stepOrbit,
   type OrbitState,
   type Vec2,
@@ -84,6 +83,7 @@ type Runtime = {
 };
 
 const STORAGE_KEY = "orbit-thief-save-v1";
+const MAX_REPLAY_FRAMES = 60 * 60 * 10;
 const ARENAS: Record<ArenaId, ArenaConfig> = {
   driftway: {
     id: "driftway",
@@ -149,7 +149,17 @@ function sanitizeReplay(value: unknown): ReplayData | undefined {
   if (!value || typeof value !== "object") return undefined;
   const replay = value as Partial<ReplayData>;
   if (!ARENAS[replay.arena as ArenaId] || !Number.isFinite(replay.seed) || !Number.isFinite(replay.score) || !Array.isArray(replay.inputEvents) || !Array.isArray(replay.trail)) return undefined;
-  const inputEvents = replay.inputEvents.filter((event): event is InputEvent => Boolean(event) && typeof event === "object" && Number.isInteger((event as InputEvent).frame) && (((event as InputEvent).type === "press") || ((event as InputEvent).type === "release")));
+  let previousFrame = -1;
+  let expectedType: InputEvent["type"] = "press";
+  const inputEvents: InputEvent[] = [];
+  for (const candidate of replay.inputEvents) {
+    if (!candidate || typeof candidate !== "object") return undefined;
+    const event = candidate as InputEvent;
+    if (!Number.isInteger(event.frame) || event.frame < 0 || event.frame > MAX_REPLAY_FRAMES || event.frame < previousFrame || (event.type !== "press" && event.type !== "release") || event.type !== expectedType) return undefined;
+    inputEvents.push({ frame: event.frame, type: event.type });
+    previousFrame = event.frame;
+    expectedType = expectedType === "press" ? "release" : "press";
+  }
   const trail = replay.trail.filter((point): point is Vec2 => Boolean(point) && typeof point === "object" && Number.isFinite((point as Vec2).x) && Number.isFinite((point as Vec2).y)).slice(-3600);
   return { arena: replay.arena as ArenaId, seed: replay.seed as number, score: Math.max(0, Math.round(replay.score as number)), outcome: replay.outcome === "dead" || replay.outcome === "cleared" ? replay.outcome : undefined, inputEvents, trail };
 }
@@ -257,25 +267,29 @@ function replayRecordedRun(data: ReplayData) {
     replay.frame = replay.orbit.frame;
     replay.trail.push({ ...replay.orbit.position });
     replay.sparks.forEach((spark) => {
-      if (!replay.collected.has(spark.index) && distance(replay.orbit.position, spark) < SPARK_HIT_RADIUS) {
+      if (!replay.collected.has(spark.index) && isSparkHit(distance(replay.orbit.position, spark))) {
         replay.collected.add(spark.index);
         replay.collectedCount += 1;
-        replay.multiplier = Math.min(6, replay.multiplier + 0.35);
-        replay.score += 100 * replay.multiplier;
+        const award = awardSpark(replay.score, replay.multiplier);
+        replay.score = award.score;
+        replay.multiplier = award.multiplier;
       }
     });
+    let closestHazard = Number.POSITIVE_INFINITY;
     replay.hazards.forEach((hazard) => {
       const gap = distance(replay.orbit.position, hazard);
-      if (!hazard.nearMissed && gap < HAZARD_NEAR_MISS_RADIUS && gap >= HAZARD_NEAR_MISS_MIN) {
+      closestHazard = Math.min(closestHazard, gap);
+      if (!hazard.nearMissed && classifyHazardGap(gap) === "near-miss") {
         hazard.nearMissed = true;
         replay.nearMisses += 1;
-        replay.multiplier = Math.min(6, replay.multiplier + 0.7);
-        replay.score += 75 * replay.multiplier;
+        const award = awardNearMiss(replay.score, replay.multiplier);
+        replay.score = award.score;
+        replay.multiplier = award.multiplier;
       }
-      if (gap < HAZARD_COLLISION_RADIUS) replay.outcome = "dead";
     });
     const radius = Math.hypot(replay.orbit.position.x, replay.orbit.position.y);
-    if (radius > SAFE_ORBIT_MAX || radius < SAFE_ORBIT_MIN) replay.outcome = "dead";
+    const terminal = resolveTerminal(closestHazard, radius);
+    if (terminal) replay.outcome = "dead";
     replay.multiplier = Math.max(1, replay.multiplier - 0.0025);
     if (!replay.outcome && ARENAS[replay.arena].goalFrames && replay.frame >= (ARENAS[replay.arena].goalFrames ?? 0)) replay.outcome = "cleared";
   }
@@ -667,38 +681,42 @@ export default function Home() {
 
       const player = runtime.orbit.position;
       runtime.sparks.forEach((spark) => {
-        if (!runtime.collected.has(spark.index) && distance(player, spark) < SPARK_HIT_RADIUS) {
+        if (!runtime.collected.has(spark.index) && isSparkHit(distance(player, spark))) {
           runtime.collected.add(spark.index);
           runtime.collectedCount += 1;
-          runtime.multiplier = Math.min(6, runtime.multiplier + 0.35);
-          runtime.score += 100 * runtime.multiplier;
+          const award = awardSpark(runtime.score, runtime.multiplier);
+          runtime.score = award.score;
+          runtime.multiplier = award.multiplier;
           beep(740 + runtime.collectedCount * 14, 0.06);
         }
       });
+      let closestHazard = Number.POSITIVE_INFINITY;
       runtime.hazards.forEach((hazard) => {
         const gap = distance(player, hazard);
-        if (!hazard.nearMissed && gap < HAZARD_NEAR_MISS_RADIUS && gap >= HAZARD_NEAR_MISS_MIN) {
+        closestHazard = Math.min(closestHazard, gap);
+        if (!hazard.nearMissed && classifyHazardGap(gap) === "near-miss") {
           hazard.nearMissed = true;
           runtime.nearMisses += 1;
-          runtime.multiplier = Math.min(6, runtime.multiplier + 0.7);
-          runtime.score += 75 * runtime.multiplier;
+          const award = awardNearMiss(runtime.score, runtime.multiplier);
+          runtime.score = award.score;
+          runtime.multiplier = award.multiplier;
           beep(520, 0.05);
-        }
-        if (gap < HAZARD_COLLISION_RADIUS) {
-          runtime.outcome = "dead";
-          runtime.deathReason = "A hazard clipped your wake.";
         }
       });
       const radius = Math.hypot(player.x, player.y);
-      if (radius > SAFE_ORBIT_MAX || radius < SAFE_ORBIT_MIN) {
+      const terminal = resolveTerminal(closestHazard, radius);
+      if (terminal) {
         runtime.outcome = "dead";
-        runtime.deathReason = radius > SAFE_ORBIT_MAX ? "You escaped the safe orbit." : "You fell into the gravity well.";
+        runtime.deathReason = terminal === "collision" ? "A hazard clipped your wake." : terminal === "escape" ? "You escaped the safe orbit." : "You fell into the gravity well.";
       }
       runtime.multiplier = Math.max(1, runtime.multiplier - 0.0025);
       if (!runtime.outcome && config.goalFrames && runtime.frame >= config.goalFrames && (runtime.kind !== "tutorial" || runtime.inputEvents.length >= 2)) runtime.outcome = "cleared";
       if (runtime.outcome) {
-        if (runtime.kind === "tutorial") finishTutorial();
-        else {
+        if (runtime.kind === "tutorial" && runtime.outcome === "cleared") finishTutorial();
+        else if (runtime.kind === "tutorial") {
+          replayCursorRef.current = 0;
+          setScreen("dead");
+        } else {
           finishRun(runtime);
           replayCursorRef.current = 0;
           setRuntimeView({ ...runtime });
@@ -822,7 +840,7 @@ export default function Home() {
             {screen === "tutorial" && <div className="stage-overlay live-overlay"><div className="live-label"><span className="pulse-dot" /> SAFE TUTORIAL / {formatTime(runtime?.frame ?? 0)}</div><p>Hold <kbd>SPACE</kbd> to tether</p><p>Release to slingshot</p></div>}
             {screen === "play" && runtime && <div className="hud-row" aria-live="polite"><div><span>SCORE</span><strong>{formatScore(runtime.score)}</strong></div><div><span>MULTIPLIER</span><strong className="accent-text">×{runtime.multiplier.toFixed(1)}</strong></div><div><span>SPARKS</span><strong>{runtime.collectedCount}/{runtime.sparks.length}</strong></div><div><span>TIME</span><strong>{formatTime(runtime.frame)}</strong></div></div>}
             {screen === "play" && runtime?.paused && <div className="stage-overlay pause-overlay"><span className="result-badge">FLIGHT PAUSED</span><h2>Hold position.</h2><p>Press <kbd>P</kbd> or <kbd>ESC</kbd> to resume.</p></div>}
-            {screen === "dead" && runtime && <div className="stage-overlay result-overlay"><span className={`result-badge ${runtime.outcome === "cleared" ? "cleared" : ""}`}>{runtime.outcome === "cleared" ? "ORBIT COMPLETE" : "SIGNAL LOST"}</span><h2>{runtime.outcome === "cleared" ? "Clean escape." : "The orbit got away."}</h2><p>{runtime.outcome === "cleared" ? "Your trajectory is banked. That route is yours now." : runtime.deathReason}</p><div className="result-score"><span>FINAL SCORE</span><strong>{formatScore(runtime.score)}</strong></div><div className="result-stats"><span><b>{currentMedals}</b> medals</span><span><b>{runtime.nearMisses}</b> near-misses</span><span><b>{runtime.collectedCount}</b> sparks</span></div><div className="result-actions"><button className="primary-button" onClick={() => startRun(runtime.arena)}>Retry run <b>↻</b></button><button className="ghost-button" onClick={() => setScreen("menu")}>Flight deck</button></div><div className="replay-note"><span>↝</span> {runtime.replayVerified ? "Deterministic replay verified" : "Replay score needs review"}</div></div>}
+            {screen === "dead" && runtime && <div className="stage-overlay result-overlay"><span className={`result-badge ${runtime.outcome === "cleared" ? "cleared" : ""}`}>{runtime.outcome === "cleared" ? "ORBIT COMPLETE" : "SIGNAL LOST"}</span><h2>{runtime.kind === "tutorial" ? "Try that tether again." : runtime.outcome === "cleared" ? "Clean escape." : "The orbit got away."}</h2><p>{runtime.kind === "tutorial" ? runtime.deathReason : runtime.outcome === "cleared" ? "Your trajectory is banked. That route is yours now." : runtime.deathReason}</p><div className="result-score"><span>{runtime.kind === "tutorial" ? "SAFE FLIGHT" : "FINAL SCORE"}</span><strong>{formatScore(runtime.score)}</strong></div><div className="result-stats"><span><b>{currentMedals}</b> medals</span><span><b>{runtime.nearMisses}</b> near-misses</span><span><b>{runtime.collectedCount}</b> sparks</span></div><div className="result-actions"><button className="primary-button" onClick={() => runtime.kind === "tutorial" ? startTutorial() : startRun(runtime.arena)}>{runtime.kind === "tutorial" ? "Retry tutorial" : "Retry run"} <b>↻</b></button><button className="ghost-button" onClick={() => setScreen("menu")}>Flight deck</button></div><div className="replay-note"><span>↝</span> {runtime.kind === "tutorial" ? "Complete one tether and release to certify" : runtime.replayVerified ? "Deterministic replay verified" : "Replay score needs review"}</div></div>}
           </div>
           <div className="stage-footer"><span>ONE BUTTON / FULL COMMITMENT</span><span>NO ACCOUNT · SAVES STAY ON THIS DEVICE</span></div>
         </section>
