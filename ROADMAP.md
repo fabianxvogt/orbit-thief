@@ -4,12 +4,13 @@
 
 - Complete the serialized browser QA pass on desktop Chromium and a narrow mobile viewport.
 - Run five independent first-session playtests and record whether onboarding and retry are understood.
-- Review the exact release commit before any public deployment.
+- Exercise the public preview through the finite-arena progression and imported-replay route.
+- Clarify Night Shift medal behavior through bounded playtesting; no behavior change is authorized by model evidence alone.
 
 ## Next
 
 - Tune arena seeds and thresholds from real playtest observations.
-- Recheck static deployment and imported replay recovery after the first hosted version.
+- Recheck public static deployment and imported replay recovery after the serialized browser pass.
 
 ## Later
 
@@ -22,4 +23,5 @@
 - Score, sparks, near-miss multiplier, hazards, completion/death, immediate retry, and trajectory replay.
 - Medal progression and arena unlocks.
 - Local settings/progress/best scores, versioned export/import, malformed-save recovery, and local-storage failure messaging.
-- Static Vinext export and Sites private registration.
+- Bounded production-model finite-arena clears with retry and imported replay equivalence.
+- Static Vinext export and public preview release at <https://orbit-thief.fabian523417.chatgpt.site>.

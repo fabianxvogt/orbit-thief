@@ -2,9 +2,11 @@
 
 Orbit Thief is a one-button gravitational score-attack game. Hold to tether into a tighter orbit, release to slingshot, collect sparks, flirt with hazards, and bank the route.
 
-## v1 status
+## Public preview status
 
-Complete browser implementation in verification. The v1 includes an interactive safe tutorial, three escalating arenas, a seeded endless challenge, fixed-step physics, deterministic input replays, near-miss multipliers, medals and unlocks, immediate retry, trajectory replay, pause/settings, local saves, and versioned portable save/replay export/import.
+The reviewed public preview is live at <https://orbit-thief.fabian523417.chatgpt.site> from source SHA `2ab90f2a92dc2628f22fd8da52e986e9fcfe17ba`. It includes the safe tutorial, three finite arenas, the seeded Night Shift challenge, fixed-step physics, deterministic input replays, medals and unlocks, retry, trajectory replay, pause/settings, local saves, and versioned portable save/replay export/import.
+
+A bounded production-model check reached finite-arena clears and matched retry and imported replay state for Driftway, Redline, and Black Halo. It is not a browser campaign, human playtest, device validation, or proof that every higher medal tier is attainable. Night Shift has no clear state by design; its terminal medal behavior remains a design and playtest question.
 
 Human five-player acceptance remains pending; no player research result is claimed.
 
