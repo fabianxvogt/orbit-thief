@@ -1,3 +1,13 @@
+<!-- portfolio
+{
+  "title": "Orbit Thief",
+  "topic": "Play & products/Games",
+  "type": "product",
+  "description": "One-button gravitational slingshot score attack game",
+  "demo": "https://orbit-thief.fabian523417.chatgpt.site"
+}
+-->
+
 # Orbit Thief
 
 Orbit Thief is a one-button gravitational score-attack game. Hold to tether into a tighter orbit, release to slingshot, collect sparks, flirt with hazards, and bank the route.
